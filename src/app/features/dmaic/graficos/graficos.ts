@@ -144,16 +144,17 @@ export class Graficos {
 
   readonly chartColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899', '#14B8A6'];
 
-  readonly paretoData = computed<ChartConfiguration<'bar'>['data']>(() => {
+  readonly paretoData = computed<ChartConfiguration<'bar' | 'line'>['data']>(() => {
     const p = this.dmaicService.pareto();
     return { labels: p.map(x => x.tipo), datasets: [
       { data: p.map(x => x.cantidad), label: 'Cantidad', backgroundColor: '#3B82F6', borderRadius: 4 },
+      { data: p.map(x => x.acumulado), label: '% Acumulado', type: 'line', borderColor: '#EF4444', backgroundColor: '#EF4444', yAxisID: 'y1', tension: 0.3, fill: false, pointBackgroundColor: '#EF4444', pointRadius: 4 },
     ]};
   });
-  readonly paretoOptions: ChartConfiguration<'bar'>['options'] = {
+  readonly paretoOptions: ChartConfiguration<'bar' | 'line'>['options'] = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: true, position: 'top' } },
-    scales: { y: { beginAtZero: true, title: { display: true, text: 'Cantidad' } } }
+    scales: { y: { beginAtZero: true, title: { display: true, text: 'Cantidad' } }, y1: { position: 'right', min: 0, max: 100, title: { display: true, text: '% Acumulado' }, grid: { drawOnChartArea: false } } }
   };
 
   readonly moduloData = computed<ChartConfiguration<'bar'>['data']>(() => {
