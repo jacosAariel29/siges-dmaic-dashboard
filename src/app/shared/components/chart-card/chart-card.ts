@@ -7,8 +7,13 @@ import { MatCardModule } from '@angular/material/card';
   template: `
     <mat-card class="chart-card">
       <mat-card-header>
-        <mat-card-title>{{ title() }}</mat-card-title>
-        <mat-card-subtitle>{{ subtitle() }}</mat-card-subtitle>
+        <div class="header-text">
+          <mat-card-title>{{ title() }}</mat-card-title>
+          <mat-card-subtitle>{{ subtitle() }}</mat-card-subtitle>
+        </div>
+        <div class="header-actions">
+          <ng-content select="[header-action]" />
+        </div>
       </mat-card-header>
       <mat-card-content>
         <div class="chart-container">
@@ -44,7 +49,9 @@ import { MatCardModule } from '@angular/material/card';
     .interp-section { margin-bottom: 12px; }
     .interp-section strong { display: block; font-size: 13px; color: #475569; margin-bottom: 4px; }
     .interp-section p { margin: 0; font-size: 13px; color: #64748B; line-height: 1.6; }
-    mat-card-header { padding-bottom: 0; }
+    mat-card-header { display: flex; align-items: flex-start; gap: 8px; padding-bottom: 0; }
+    .header-text { flex: 1; }
+    .header-actions { flex-shrink: 0; padding-top: 4px; }
     mat-card-subtitle { font-size: 13px; }
   `]
 })
