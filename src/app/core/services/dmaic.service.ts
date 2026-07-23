@@ -52,8 +52,30 @@ export class DmaicService {
   readonly rawData = computed(() => this.filterService.filteredIncidents());
   private data = computed(() => this.filterService.filteredIncidents());
   private allData = computed(() => this.filterService.filterOptions);
+  private readonly BASE_CASOS = 1500;
 
   constructor(private filterService: DmaicFilterService) {}
+
+  private invNorm(p: number): number {
+    if (p < 0.5) return -this.invNorm(1 - p);
+    const c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+    const d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
+    const t = Math.sqrt(-2 * Math.log(1 - p));
+    const num = c0 + c1 * t + c2 * t * t;
+    const den = 1 + d1 * t + d2 * t * t + d3 * t * t * t;
+    return t - num / den;
+  }
+
+  private sigmaDesdeDpmo(dpmoVal: number): number {
+    if (dpmoVal <= 0) return 6;
+    const yieldVal = 1 - Math.min(0.9999, dpmoVal / 1000000);
+    const z = this.invNorm(yieldVal);
+    return Number((z + 1.5).toFixed(2));
+  }
+
+  private dpmoDesdeDefectos(defectos: number): number {
+    return Math.round((defectos / this.BASE_CASOS) * 1000000);
+  }
 
   private getTiempos = computed(() => this.data().map(d => Number(d['Tiempo Resolucion (h)']) || 0));
   private getCerrados = computed(() => this.data().filter(d => d['Es Cerrado'] === '1'));
@@ -62,18 +84,9 @@ export class DmaicService {
 
   readonly totalDefectos = computed(() => this.data().length);
 
-  readonly dpmo = computed(() => {
-    const total = this.totalDefectos();
-    if (total === 0) return 0;
-    const oportunidades = total * 10;
-    return Math.round((total / oportunidades) * 1000000);
-  });
+  readonly dpmo = computed(() => this.dpmoDesdeDefectos(this.totalDefectos()));
 
-  readonly nivelSigma = computed(() => {
-    const d = this.dpmo();
-    if (d <= 0) return 6;
-    return Number((1.5 + Math.sqrt(2 * Math.log(1000000 / (d || 1)))).toFixed(2));
-  });
+  readonly nivelSigma = computed(() => this.sigmaDesdeDpmo(this.dpmo()));
 
   readonly tiempoPromedio = computed(() => {
     const t = this.getTiempos();
@@ -103,14 +116,14 @@ export class DmaicService {
     return total.length ? Math.round((auto.length / total.length) * 100) : 0;
   });
 
-  readonly casosEjecutados = computed(() => this.data().length);
+  readonly casosEjecutados = computed(() => this.BASE_CASOS);
 
   readonly kpis = computed<KpiItem[]>(() => {
     const total = this.totalDefectos();
     return [
       { label: 'Total Defectos', value: total, unit: '', icon: 'bug_report', color: '#3B82F6', previous: total > 0 ? total - 1 : undefined, description: 'Total de defectos registrados en el período', meta: 0, metaDir: 'down' },
-      { label: 'DPMO', value: this.dpmo(), unit: '', icon: 'analytics', color: '#8B5CF6', description: 'Defectos por millón de oportunidades', meta: 50000, metaDir: 'down' },
-      { label: 'Nivel Sigma', value: this.nivelSigma(), unit: 'σ', icon: 'speed', color: '#10B981', description: 'Nivel de calidad del proceso (mayor es mejor)', meta: 4, metaDir: 'up' },
+      { label: 'DPMO', value: this.dpmo(), unit: '', icon: 'analytics', color: '#8B5CF6', description: 'Defectos por millón de oportunidades', meta: 30000, metaDir: 'down' },
+      { label: 'Nivel Sigma', value: this.nivelSigma(), unit: 'σ', icon: 'speed', color: '#10B981', description: 'Nivel de calidad del proceso (mayor es mejor)', meta: 3.5, metaDir: 'up' },
       { label: 'Tiempo Promedio', value: this.tiempoPromedio(), unit: 'h', icon: 'schedule', color: '#F59E0B', description: 'Tiempo promedio de resolución de defectos', meta: 24, metaDir: 'down' },
       { label: 'Tiempo Máximo', value: this.tiempoMax(), unit: 'h', icon: 'arrow_upward', color: '#EF4444', description: 'Tiempo máximo registrado para resolver un defecto', meta: 48, metaDir: 'down' },
       { label: 'Tiempo Mínimo', value: this.tiempoMin(), unit: 'h', icon: 'arrow_downward', color: '#10B981', description: 'Tiempo mínimo registrado para resolver un defecto', meta: 1, metaDir: 'down' },
@@ -184,32 +197,34 @@ export class DmaicService {
   });
 
   readonly evolucionSigma = computed<SimpleRow[]>(() => {
-    const grouped = new Map<string, { total: number; oportunidades: number }>();
+    const months = [...new Set(this.data().map(d => d['Año-Mes']))].sort();
+    const numMeses = months.length || 1;
+    const casosPorMes = this.BASE_CASOS / numMeses;
+    const grouped = new Map<string, number>();
     for (const d of this.data()) {
       const key = d['Año-Mes'];
-      const g = grouped.get(key) || { total: 0, oportunidades: 0 };
-      g.total++;
-      g.oportunidades += 10;
-      grouped.set(key, g);
+      grouped.set(key, (grouped.get(key) || 0) + 1);
     }
-    return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, { total, oportunidades }]) => {
-      const dpmoVal = oportunidades ? Math.round((total / oportunidades) * 1000000) : 0;
-      const sigma = dpmoVal <= 0 ? 6 : Number((1.5 + Math.sqrt(2 * Math.log(1000000 / (dpmoVal || 1)))).toFixed(2));
+    return months.map(name => {
+      const total = grouped.get(name) || 0;
+      const dpmoVal = Math.round((total / casosPorMes) * 1000000);
+      const sigma = this.sigmaDesdeDpmo(dpmoVal);
       return { name, value: sigma };
     });
   });
 
   readonly evolucionDpmo = computed<SimpleRow[]>(() => {
-    const grouped = new Map<string, { total: number; oportunidades: number }>();
+    const months = [...new Set(this.data().map(d => d['Año-Mes']))].sort();
+    const numMeses = months.length || 1;
+    const casosPorMes = this.BASE_CASOS / numMeses;
+    const grouped = new Map<string, number>();
     for (const d of this.data()) {
       const key = d['Año-Mes'];
-      const g = grouped.get(key) || { total: 0, oportunidades: 0 };
-      g.total++;
-      g.oportunidades += 10;
-      grouped.set(key, g);
+      grouped.set(key, (grouped.get(key) || 0) + 1);
     }
-    return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, { total, oportunidades }]) => {
-      const dpmoVal = oportunidades ? Math.round((total / oportunidades) * 1000000) : 0;
+    return months.map(name => {
+      const total = grouped.get(name) || 0;
+      const dpmoVal = Math.round((total / casosPorMes) * 1000000);
       return { name, value: dpmoVal };
     });
   });
@@ -296,9 +311,8 @@ export class DmaicService {
     const promedio = this.tiempoPromedio();
 
     let estado: string;
-    if (sigma >= 4.5) estado = 'El proceso se encuentra en un nivel de calidad excelente.';
-    else if (sigma >= 4) estado = 'El proceso tiene un buen nivel de calidad, con oportunidades de mejora.';
-    else if (sigma >= 3) estado = 'El proceso requiere mejoras significativas para alcanzar estándares de calidad.';
+    if (sigma >= 3.5) estado = 'El proceso ha alcanzado la meta de calidad. Se recomienda mantener y mejorar continuamente.';
+    else if (sigma >= 2.5) estado = 'El proceso requiere mejoras significativas para alcanzar la meta de 3.5σ.';
     else estado = 'El proceso está por debajo de los estándares aceptables. Se requiere intervención urgente.';
 
     const riesgos: string[] = [];
@@ -307,8 +321,8 @@ export class DmaicService {
     if (promedio > 24) riesgos.push(`El tiempo promedio de resolución (${promedio}h) supera las 24 horas.`);
 
     let recomendacion: string;
-    if (sigma < 3.5) recomendacion = 'Implementar un plan de acción correctiva inmediato. Priorizar la reducción de defectos críticos y establecer metas semanales de cierre.';
-    else if (sigma < 4.5) recomendacion = 'Fortalecer las pruebas automatizadas y reducir el tiempo de resolución. Enfocar esfuerzos en los módulos con mayor concentración de defectos.';
+    if (sigma < 2.5) recomendacion = 'Implementar un plan de acción correctiva inmediato. Priorizar la reducción de defectos críticos y establecer metas semanales de cierre.';
+    else if (sigma < 3.5) recomendacion = 'Fortalecer las pruebas automatizadas y reducir el tiempo de resolución. Enfocar esfuerzos en los módulos con mayor concentración de defectos para alcanzar la meta de 3.5σ.';
     else recomendacion = 'Mantener el estándar actual y documentar las mejores prácticas. Implementar mejora continua en los procesos de QA.';
 
     return { estado, nivelSigma: sigma, riesgos, recomendacion };

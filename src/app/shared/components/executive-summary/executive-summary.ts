@@ -26,7 +26,7 @@ import { ResumenEjecutivo } from '../../../core/services/dmaic.service';
             <mat-icon>speed</mat-icon>
             <div>
               <strong>Nivel Sigma</strong>
-              <p class="sigma-value" [class.good]="data().nivelSigma >= 4" [class.warn]="data().nivelSigma >= 3 && data().nivelSigma < 4" [class.bad]="data().nivelSigma < 3">
+              <p class="sigma-value" [class.good]="data().nivelSigma >= 3.5" [class.warn]="data().nivelSigma >= 2.5 && data().nivelSigma < 3.5" [class.bad]="data().nivelSigma < 2.5">
                 {{ data().nivelSigma }} σ
               </p>
             </div>
